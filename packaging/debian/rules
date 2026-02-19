@@ -1,0 +1,10 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	install -Dm755 alarm-notify-linux $(DESTDIR)/usr/bin/alarm-notify
+	install -Dm644 alarm-notify.png $(DESTDIR)/usr/share/alarm-notify/alarm-notify.png
+	install -Dm644 alarm-notify.wav $(DESTDIR)/usr/share/alarm-notify/alarm-notify.wav
+	install -Dm644 README.md $(DESTDIR)/usr/share/doc/alarm-notify/README.md

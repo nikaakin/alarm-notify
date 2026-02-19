@@ -1,0 +1,110 @@
+#!/bin/bash
+# fire notification in given number of minutes
+TIMER=0
+MESSAGE=""
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ASSET_DIR="$SCRIPT_DIR"
+DOC_DIR="$SCRIPT_DIR"
+
+if [ ! -f "$ASSET_DIR/alarm-notify.png" ] && [ -d /usr/share/alarm-notify ]; then
+    ASSET_DIR="/usr/share/alarm-notify"
+fi
+
+if [ ! -f "$DOC_DIR/README.md" ] && [ -f /usr/share/doc/alarm-notify/README.md ]; then
+    DOC_DIR="/usr/share/doc/alarm-notify"
+fi
+
+# Parse options: -e = external terminal, -n = nohup (silent background)
+EXTERNAL=0
+NOHUP=0
+while getopts "en" opt; do
+    case $opt in
+        e) EXTERNAL=1 ;;
+        n) NOHUP=1 ;;
+        \?) echo "Usage: $0 [-e] [-n] [TIMER] [MESSAGE]"; exit 1 ;;
+    esac
+done
+shift $((OPTIND -1))
+
+if [ "$1" = "--help" ]
+then cat "$DOC_DIR/README.md"
+else
+
+if [ -n "$1" ]
+then TIMER=$1
+fi
+if [ -n "$2" ]
+then MESSAGE="$2"
+fi
+
+if ! [[ "$TIMER" =~ ^[0-9]+$ ]]; then
+    echo "Error: TIMER must be a positive integer"
+    exit 1
+fi
+
+launch_in_terminal() {
+    SCRIPT="$SCRIPT_DIR/$(basename "$0")"
+
+    if command -v gnome-terminal >/dev/null 2>&1; then
+        gnome-terminal -- bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        exit 0
+    fi
+    if command -v alacritty >/dev/null 2>&1; then
+        alacritty -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        exit 0
+    fi
+    if command -v konsole >/dev/null 2>&1; then
+        konsole -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        exit 0
+    fi
+    if command -v xfce4-terminal >/dev/null 2>&1; then
+        xfce4-terminal --hold -e "bash -c \"$SCRIPT $TIMER \\\"$MESSAGE\\\"; exec bash\"" >/dev/null 2>&1 &
+        exit 0
+    fi
+    if command -v xterm >/dev/null 2>&1; then
+        xterm -hold -e "bash -c '$SCRIPT $TIMER \"$MESSAGE\"; exec bash'" >/dev/null 2>&1 &
+        exit 0
+    fi
+    if command -v ghostty >/dev/null 2>&1; then
+        ghostty -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        exit 0
+    fi
+
+
+    # Last resort: run detached (no visible terminal)
+    nohup bash -c "$SCRIPT $TIMER \"$MESSAGE\"" >/dev/null 2>&1 &
+    disown >/dev/null 2>&1 || true
+    exit 0
+}
+
+if [ "$EXTERNAL" -eq 1 ]; then
+    # External terminal requested: launch countdown there and exit
+    launch_in_terminal
+fi
+
+if [ "$NOHUP" -eq 1 ]; then
+    # Run silently in background with no output anywhere
+    SCRIPT="$SCRIPT_DIR/$(basename "$0")"
+    nohup bash -c "$SCRIPT $TIMER \"$MESSAGE\"" >/dev/null 2>&1 &
+    disown >/dev/null 2>&1 || true
+    exit 0
+fi
+
+(
+for ((i=TIMER*60; i>0; i--)); do
+    printf "\rTime remaining: %02d:%02d" $((i/60)) $((i%60))
+    sleep 1
+done
+
+echo -e "\nTime is up!."
+if [ -z "$MESSAGE" ]; then
+    NOTIFICATION="$TIMER timer is up"
+else
+    NOTIFICATION="$TIMER timer is up: $MESSAGE"
+fi
+notify-send -u critical -t 0 -i "$ASSET_DIR/alarm-notify.png" 'Time is up' "$NOTIFICATION"
+aplay "$ASSET_DIR/alarm-notify.wav" > /dev/null 2>&1
+exit 0
+)
+
+fi

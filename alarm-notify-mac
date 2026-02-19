@@ -1,0 +1,35 @@
+#!/bin/bash
+
+TIMER=0
+BREAK=5
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ASSET_DIR="$SCRIPT_DIR"
+DOC_DIR="$SCRIPT_DIR"
+NOTIFIER="$(which terminal-notifier)"
+
+if [ ! -f "$ASSET_DIR/alarm-notify.png" ] && [ -d /usr/local/share/alarm-notify ]; then
+  ASSET_DIR="/usr/local/share/alarm-notify"
+fi
+
+if [ ! -f "$DOC_DIR/README.md" ] && [ -f /usr/local/share/doc/alarm-notify/README.md ]; then
+  DOC_DIR="/usr/local/share/doc/alarm-notify"
+fi
+
+if [ "$1" = "--help" ]; then
+  cat "$DOC_DIR/README.md"
+  exit 0
+fi
+
+if [ -n "$1" ]; then
+  TIMER=$1
+fi
+
+if [ -n "$2" ]; then
+  BREAK=$2
+fi
+
+(
+  sleep $((TIMER * 60))
+  "$NOTIFIER" -appIcon "$ASSET_DIR/alarm-notify.png" -title "Time is up" -message "$TIMER min is over, $BREAK min break"
+  afplay "$ASSET_DIR/alarm-notify.wav"
+) & disown

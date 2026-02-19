@@ -1,0 +1,20 @@
+pkgbase = alarm-notify
+	pkgdesc = Simple timer notifications with sound and custom messages
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/nikaakin/alarm-notify
+	arch = any
+	license = MIT
+	depends = bash
+	depends = libnotify
+	depends = alsa-utils
+	optdepends = gnome-terminal: external terminal support
+	optdepends = alacritty: external terminal support
+	optdepends = konsole: external terminal support
+	optdepends = xfce4-terminal: external terminal support
+	optdepends = xterm: external terminal support
+	optdepends = ghostty: external terminal support
+	source = alarm-notify-1.0.0.tar.gz::https://github.com/nikaakin/alarm-notify/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = alarm-notify

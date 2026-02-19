@@ -1,0 +1,23 @@
+# Build artifacts
+packaging/arch/pkg/
+packaging/arch/src/
+packaging/arch/*.tar.zst
+packaging/arch/*.tar.xz
+
+# Local dev symlinks in arch dir
+packaging/arch/alarm-notify-linux
+packaging/arch/alarm-notify.png
+packaging/arch/alarm-notify.wav
+packaging/arch/README.md
+packaging/arch/LICENCE
+
+# Debian build
+packaging/debian/*.deb
+packaging/debian/alarm-notify/
+
+# Editor
+*.swp
+*~
+
+# Personal
+todo

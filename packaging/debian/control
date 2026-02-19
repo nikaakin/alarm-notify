@@ -1,0 +1,16 @@
+Source: alarm-notify
+Section: utils
+Priority: optional
+Maintainer: Nika nika.tsutskiridze.dev@gmail.com
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/nikaakin/alarm-notify
+Rules-Requires-Root: no
+
+Package: alarm-notify
+Architecture: all
+Depends: ${misc:Depends}, bash, libnotify-bin, alsa-utils
+Description: Simple timer notifications with sound and custom messages
+ A shell script that sets a countdown timer and shows a desktop
+ notification with optional sound when time is up. Supports running
+ in external terminal windows or silently in the background.
