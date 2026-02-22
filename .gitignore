@@ -22,3 +22,4 @@ packaging/debian/alarm-notify/
 # Personal
 todo
 LOAD_TASKS_EXPLAINED.md
+release.sh
