@@ -164,6 +164,9 @@ load_tasks() {
 # Source user's real zshrc
 [[ -f "\$HOME/.zshrc" ]] && source "\$HOME/.zshrc"
 
+# Enable job control
+set -m
+
 # Create alarm jobs
 $job_commands
 echo ''
@@ -180,6 +183,9 @@ EOF
         cat > "$tmpdir/init.bash" << EOF
 # Source user's real bashrc
 [[ -f "\$HOME/.bashrc" ]] && source "\$HOME/.bashrc"
+
+# Enable job control (required for fg/bg to work properly)
+set -m
 
 # Create alarm jobs
 $job_commands
