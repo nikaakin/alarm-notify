@@ -36,6 +36,7 @@ Options:
 
 - `-e` launch countdown in a new terminal window and exit
 - `-n` run silently in the background
+- `--load [FILE]` load tasks from file as suspended jobs (default: `~/.config/alarm-notify/tasks`)
 - `--help` print this README
 
 Examples:
@@ -46,6 +47,62 @@ alarm-notify 25 "Stand up and stretch" #starts timer in the current terminal wit
 alarm-notify -n 45 "Meeting starts" # starts timer in (nohup) on background terminal
 alarm-notify -e 5 "Tea" #starts timer in external terminal and it will spawn up external terminal as well
 ```
+
+## Batch Tasks (Daily Workflow)
+
+Load multiple timers from a file as suspended shell jobs. Perfect for planning your day.
+
+### Task File Format
+
+Create `~/.config/alarm-notify/tasks` (or any file):
+
+```
+# Comments start with #
+30 dsa training
+60 documentation review
+45 code review
+15 break
+```
+
+Format: `<minutes> <message>` — one task per line.
+
+### Usage
+
+```bash
+# Load from default path (~/.config/alarm-notify/tasks)
+alarm-notify --load
+
+# Load from custom path
+alarm-notify --load ~/my-tasks.txt
+alarm-notify --load=/path/to/tasks
+```
+
+**Note**: This command spawns a new interactive shell with your tasks loaded as suspended jobs. Your shell configuration (`.zshrc`/`.bashrc`) is preserved.
+
+### Workflow
+
+```
+$ alarm-notify --load
+Loading 3 tasks from /home/user/.config/alarm-notify/tasks...
+
+  [1] 30 min - dsa training
+  [2] 60 min - documentation review  
+  [3] 45 min - code review
+
+Tasks loaded. Use: jobs (list), fg (start next), Ctrl+Z (pause)
+```
+
+Control your tasks:
+
+| Command | Action |
+|---------|--------|
+| `jobs` | List all suspended timers |
+| `fg` | Start next task (first in file) |
+| `fg %2` | Start specific job by number |
+| `Ctrl+Z` | Pause current timer |
+| `kill %1` | Cancel a specific job |
+
+This lets you edit your task file the night before and load it in your startup terminal each morning.
 
 macOS script:
 

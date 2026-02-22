@@ -14,17 +14,195 @@ if [ ! -f "$DOC_DIR/README.md" ] && [ -f /usr/share/doc/alarm-notify/README.md ]
     DOC_DIR="/usr/share/doc/alarm-notify"
 fi
 
+# Escape a string for safe embedding in single-quoted shell context
+# Replaces ' with '\'' (end quote, escaped quote, start quote)
+escape_single_quotes() {
+    printf '%s' "${1//\'/\'\\\'\'}"
+}
+
+# Maximum timer value (7 days in minutes) to prevent integer overflow/DoS
+MAX_TIMER=10080
+
 # Parse options: -e = external terminal, -n = nohup (silent background)
 EXTERNAL=0
 NOHUP=0
+LOAD_TASKS=0
+LOAD_PATH=""
+
+# Handle --load before getopts (long option)
+for arg in "$@"; do
+    case $arg in
+        --load)
+            LOAD_TASKS=1
+            ;;
+        --load=*)
+            LOAD_TASKS=1
+            LOAD_PATH="${arg#*=}"
+            ;;
+    esac
+done
+
+# Remove --load and --load=* from arguments for getopts
+ARGS=()
+SKIP_NEXT=0
+for arg in "$@"; do
+    if [ "$SKIP_NEXT" -eq 1 ]; then
+        LOAD_PATH="$arg"
+        SKIP_NEXT=0
+        continue
+    fi
+    case $arg in
+        --load)
+            if [ -z "$LOAD_PATH" ]; then
+                SKIP_NEXT=1
+            fi
+            ;;
+        --load=*)
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+set -- "${ARGS[@]}"
+
 while getopts "en" opt; do
     case $opt in
         e) EXTERNAL=1 ;;
         n) NOHUP=1 ;;
-        \?) echo "Usage: $0 [-e] [-n] [TIMER] [MESSAGE]"; exit 1 ;;
+        \?) echo "Usage: $0 [-e] [-n] [--load [FILE]] [TIMER] [MESSAGE]"; exit 1 ;;
     esac
 done
 shift $((OPTIND -1))
+
+# Load tasks from file and create suspended jobs in a new shell
+load_tasks() {
+    local file="$1"
+    local script_path="$SCRIPT_DIR/$(basename "$0")"
+    
+    if [ ! -f "$file" ]; then
+        echo "Error: Task file not found: $file"
+        return 1
+    fi
+    
+    # Read tasks into array (we'll process in reverse for correct fg order)
+    local tasks=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        tasks+=("$line")
+    done < "$file"
+    
+    if [ ${#tasks[@]} -eq 0 ]; then
+        echo "No tasks found in $file"
+        return 1
+    fi
+    
+    # Build commands to create jobs
+    local job_commands=""
+    local task_num=1
+    
+    # Process in reverse order so first task in file is last job (fg runs it first)
+    for ((i=${#tasks[@]}-1; i>=0; i--)); do
+        line="${tasks[$i]}"
+        # Parse: first word is minutes, rest is message
+        local minutes="${line%% *}"
+        local message="${line#* }"
+        
+        # If no space, message equals minutes (no message provided)
+        if [ "$minutes" = "$message" ]; then
+            message=""
+        fi
+        
+        # Validate minutes
+        if ! [[ "$minutes" =~ ^[0-9]+$ ]]; then
+            echo "Warning: Skipping invalid line (not a number): $line"
+            continue
+        fi
+        
+        if [ "$minutes" -eq 0 ]; then
+            echo "Warning: Skipping invalid line (timer must be > 0): $line"
+            continue
+        fi
+        
+        if [ "$minutes" -gt "$MAX_TIMER" ]; then
+            echo "Warning: Skipping invalid line (exceeds $MAX_TIMER min limit): $line"
+            continue
+        fi
+        
+        # Escape for safe shell embedding (prevent command injection)
+        local escaped_script=$(escape_single_quotes "$script_path")
+        local escaped_message=$(escape_single_quotes "$message")
+        
+        # Build the command
+        if [ -n "$message" ]; then
+            job_commands+="'$escaped_script' $minutes '$escaped_message' & kill -STOP \$!; "
+            job_commands+="echo '  [$task_num] $minutes min - $escaped_message'; "
+        else
+            job_commands+="'$escaped_script' $minutes & kill -STOP \$!; "
+            job_commands+="echo '  [$task_num] $minutes min'; "
+        fi
+        ((task_num++))
+    done
+    
+    echo "Loading ${#tasks[@]} tasks from $file..."
+    echo ""
+    
+    # Create temp directory for shell init with secure permissions
+    local tmpdir
+    tmpdir=$(mktemp -d /tmp/alarm-notify-init.XXXXXX) || {
+        echo "Error: Failed to create temp directory"
+        return 1
+    }
+    
+    # Ensure restrictive permissions on temp directory
+    chmod 700 "$tmpdir"
+    
+    if [[ "$SHELL" == *zsh* ]]; then
+        # For zsh: use ZDOTDIR to inject our commands into shell startup
+        cat > "$tmpdir/.zshrc" << EOF
+# Source user's real zshrc
+[[ -f "\$HOME/.zshrc" ]] && source "\$HOME/.zshrc"
+
+# Create alarm jobs
+$job_commands
+echo ''
+echo 'Tasks loaded. Use: jobs (list), fg (start next), Ctrl+Z (pause)'
+
+# Cleanup temp dir
+rm -rf "$tmpdir"
+EOF
+        # Secure the init file
+        chmod 600 "$tmpdir/.zshrc"
+        ZDOTDIR="$tmpdir" exec zsh
+    else
+        # For bash: use --init-file
+        cat > "$tmpdir/init.bash" << EOF
+# Source user's real bashrc
+[[ -f "\$HOME/.bashrc" ]] && source "\$HOME/.bashrc"
+
+# Create alarm jobs
+$job_commands
+echo ''
+echo 'Tasks loaded. Use: jobs (list), fg (start next), Ctrl+Z (pause)'
+
+# Cleanup temp dir
+rm -rf "$tmpdir"
+EOF
+        # Secure the init file
+        chmod 600 "$tmpdir/init.bash"
+        exec bash --init-file "$tmpdir/init.bash"
+    fi
+}
+
+if [ "$LOAD_TASKS" -eq 1 ]; then
+    # Default path if not specified
+    if [ -z "$LOAD_PATH" ]; then
+        LOAD_PATH="$HOME/.config/alarm-notify/tasks"
+    fi
+    load_tasks "$LOAD_PATH"
+    exit 0
+fi
 
 if [ "$1" = "--help" ]
 then cat "$DOC_DIR/README.md"
@@ -42,37 +220,52 @@ if ! [[ "$TIMER" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
+if [ "$TIMER" -gt "$MAX_TIMER" ]; then
+    echo "Error: TIMER cannot exceed $MAX_TIMER minutes (7 days)"
+    exit 1
+fi
+
+if [ "$TIMER" -eq 0 ]; then
+    echo "Error: TIMER must be greater than 0"
+    exit 1
+fi
+
 launch_in_terminal() {
     SCRIPT="$SCRIPT_DIR/$(basename "$0")"
+    # Escape for safe embedding in shell commands
+    local escaped_script=$(escape_single_quotes "$SCRIPT")
+    local escaped_message=$(escape_single_quotes "$MESSAGE")
+    # Use a safe, known shell instead of trusting $SHELL
+    local cmd="'$escaped_script' $TIMER '$escaped_message'; exec bash"
 
     if command -v gnome-terminal >/dev/null 2>&1; then
-        gnome-terminal -- bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        gnome-terminal -- bash -c "$cmd" >/dev/null 2>&1 &
         exit 0
     fi
     if command -v alacritty >/dev/null 2>&1; then
-        alacritty -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        alacritty -e bash -c "$cmd" >/dev/null 2>&1 &
         exit 0
     fi
     if command -v konsole >/dev/null 2>&1; then
-        konsole -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        konsole -e bash -c "$cmd" >/dev/null 2>&1 &
         exit 0
     fi
     if command -v xfce4-terminal >/dev/null 2>&1; then
-        xfce4-terminal --hold -e "bash -c \"$SCRIPT $TIMER \\\"$MESSAGE\\\"; exec bash\"" >/dev/null 2>&1 &
+        xfce4-terminal -e "bash -c \"$cmd\"" >/dev/null 2>&1 &
         exit 0
     fi
     if command -v xterm >/dev/null 2>&1; then
-        xterm -hold -e "bash -c '$SCRIPT $TIMER \"$MESSAGE\"; exec bash'" >/dev/null 2>&1 &
+        xterm -hold -e bash -c "$cmd" >/dev/null 2>&1 &
         exit 0
     fi
     if command -v ghostty >/dev/null 2>&1; then
-        ghostty -e bash -c "$SCRIPT $TIMER \"$MESSAGE\"; exec bash" >/dev/null 2>&1 &
+        ghostty -e bash -c "$cmd" >/dev/null 2>&1 &
         exit 0
     fi
 
 
     # Last resort: run detached (no visible terminal)
-    nohup bash -c "$SCRIPT $TIMER \"$MESSAGE\"" >/dev/null 2>&1 &
+    nohup bash -c "'$escaped_script' $TIMER '$escaped_message'" >/dev/null 2>&1 &
     disown >/dev/null 2>&1 || true
     exit 0
 }
@@ -85,7 +278,9 @@ fi
 if [ "$NOHUP" -eq 1 ]; then
     # Run silently in background with no output anywhere
     SCRIPT="$SCRIPT_DIR/$(basename "$0")"
-    nohup bash -c "$SCRIPT $TIMER \"$MESSAGE\"" >/dev/null 2>&1 &
+    escaped_script=$(escape_single_quotes "$SCRIPT")
+    escaped_message=$(escape_single_quotes "$MESSAGE")
+    nohup bash -c "'$escaped_script' $TIMER '$escaped_message'" >/dev/null 2>&1 &
     disown >/dev/null 2>&1 || true
     exit 0
 fi
@@ -102,7 +297,8 @@ if [ -z "$MESSAGE" ]; then
 else
     NOTIFICATION="$TIMER timer is up: $MESSAGE"
 fi
-notify-send -u critical -t 0 -i "$ASSET_DIR/alarm-notify.png" 'Time is up' "$NOTIFICATION"
+# Use -- to prevent $NOTIFICATION from being interpreted as flags
+notify-send -u critical -t 0 -i "$ASSET_DIR/alarm-notify.png" -- 'Time is up' "$NOTIFICATION"
 aplay "$ASSET_DIR/alarm-notify.wav" > /dev/null 2>&1
 exit 0
 )
