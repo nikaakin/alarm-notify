@@ -23,13 +23,14 @@ escape_single_quotes() {
 # Maximum timer value (7 days in minutes) to prevent integer overflow/DoS
 MAX_TIMER=10080
 
-# Parse options: -e = external terminal, -n = nohup (silent background)
+# Parse options: -e = external terminal, -n = nohup (silent background), -p = start paused
 EXTERNAL=0
 NOHUP=0
 LOAD_TASKS=0
 LOAD_PATH=""
+START_PAUSED=0
 
-# Handle --load before getopts (long option)
+# Handle long options before getopts
 for arg in "$@"; do
     case $arg in
         --load)
@@ -39,10 +40,13 @@ for arg in "$@"; do
             LOAD_TASKS=1
             LOAD_PATH="${arg#*=}"
             ;;
+        --paused)
+            START_PAUSED=1
+            ;;
     esac
 done
 
-# Remove --load and --load=* from arguments for getopts
+# Remove --load, --load=*, and --paused from arguments for getopts
 ARGS=()
 SKIP_NEXT=0
 for arg in "$@"; do
@@ -57,7 +61,12 @@ for arg in "$@"; do
                 SKIP_NEXT=1
             fi
             ;;
-        --load=*)
+        --load=*|--paused)
+            ;;
+        --help)
+            # ARGS+=("$arg")
+            cat "$DOC_DIR/README.md"
+            exit 0
             ;;
         *)
             ARGS+=("$arg")
@@ -100,6 +109,7 @@ load_tasks() {
     
     # Build commands to create jobs
     local job_commands=""
+    local echo_commands=""
     local task_num=1
     
     # Process in reverse order so first task in file is last job (fg runs it first)
@@ -134,13 +144,13 @@ load_tasks() {
         local escaped_script=$(escape_single_quotes "$script_path")
         local escaped_message=$(escape_single_quotes "$message")
         
-        # Build the command
+        # Build the command (use --paused so script stops itself, more reliable)
         if [ -n "$message" ]; then
-            job_commands+="'$escaped_script' $minutes '$escaped_message' & kill -STOP \$!; "
-            job_commands+="echo '  [$task_num] $minutes min - $escaped_message'; "
+            job_commands+="'$escaped_script' --paused $minutes '$escaped_message' &"
+            echo_commands+="echo '  [$task_num] $minutes min - $escaped_message'"
         else
-            job_commands+="'$escaped_script' $minutes & kill -STOP \$!; "
-            job_commands+="echo '  [$task_num] $minutes min'; "
+            job_commands+="'$escaped_script' --paused $minutes &"
+            echo_commands+="echo '  [$task_num] $minutes min'"
         fi
         ((task_num++))
     done
@@ -164,13 +174,26 @@ load_tasks() {
 # Source user's real zshrc
 [[ -f "\$HOME/.zshrc" ]] && source "\$HOME/.zshrc"
 
-# Enable job control
-set -m
+# Enable job control, suppress notifications during job creation
+setopt monitor
+unsetopt notify
 
-# Create alarm jobs
+# Create alarm jobs (scripts stop themselves with --paused)
 $job_commands
+
+# Wait for jobs to be registered and stopped
+sleep 0.2
+
+# Re-enable notifications
+setopt notify
+
+# Print task list
+$echo_commands
 echo ''
 echo 'Tasks loaded. Use: jobs (list), fg (start next), Ctrl+Z (pause)'
+
+# Reset ZDOTDIR so child shells use normal config
+unset ZDOTDIR
 
 # Cleanup temp dir
 rm -rf "$tmpdir"
@@ -187,8 +210,14 @@ EOF
 # Enable job control (required for fg/bg to work properly)
 set -m
 
-# Create alarm jobs
+# Create alarm jobs (scripts stop themselves with --paused)
 $job_commands
+
+# Wait for jobs to be registered and stopped
+sleep 0.2
+
+# Print task list
+$echo_commands
 echo ''
 echo 'Tasks loaded. Use: jobs (list), fg (start next), Ctrl+Z (pause)'
 
@@ -289,6 +318,12 @@ if [ "$NOHUP" -eq 1 ]; then
     nohup bash -c "'$escaped_script' $TIMER '$escaped_message'" >/dev/null 2>&1 &
     disown >/dev/null 2>&1 || true
     exit 0
+fi
+
+# If started with --paused, stop self immediately (used by --load)
+# The script will be resumed later with fg
+if [ "$START_PAUSED" -eq 1 ]; then
+    kill -STOP $$
 fi
 
 (
