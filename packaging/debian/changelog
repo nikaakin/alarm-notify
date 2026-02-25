@@ -1,5 +1,5 @@
-alarm-notify (1.2.1-1) unstable; urgency=medium
+alarm-notify (1.2.2-1) unstable; urgency=medium
 
-  * version bump on arch
+  * fix release.sh
 
- -- Nika Tsutskiridze <nikaakin@users.noreply.github.com>  Wed, 25 Feb 2026 17:44:22 +0400
+ -- Nika Tsutskiridze <nikaakin@users.noreply.github.com>  Wed, 25 Feb 2026 17:46:03 +0400
