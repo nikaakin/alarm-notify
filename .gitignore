@@ -14,6 +14,7 @@ packaging/arch/LICENCE
 # Debian build
 packaging/debian/*.deb
 packaging/debian/alarm-notify/
+packaging/debian/build-deb/
 
 # Editor
 *.swp
@@ -23,3 +24,4 @@ packaging/debian/alarm-notify/
 todo
 LOAD_TASKS_EXPLAINED.md
 release.sh
+docs/*

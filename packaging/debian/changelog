@@ -1,5 +1,10 @@
-alarm-notify (1.0.0-1) unstable; urgency=medium
+alarm-notify (1.1.2-1) unstable; urgency=medium
 
-  * Initial release
+  * Initial Debian release
+  * Minute-based timer with optional message
+  * Terminal countdown display
+  * External terminal mode (-e) and silent background mode (-n)
+  * Desktop notification with sound alert
+  * Batch task loading from file (--load)
 
- -- Nika <your-email@example.com>  Wed, 19 Feb 2026 12:00:00 +0000
+ -- Nika Tsutskiridze <nikaakin@users.noreply.github.com>  Mon, 24 Feb 2026 12:00:00 +0000
