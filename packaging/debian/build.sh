@@ -4,7 +4,7 @@
 
 set -e
 
-VERSION="1.1.2"
+VERSION="1.2.0"
 PKGNAME="alarm-notify"
 
 # Navigate to repository root (two levels up from packaging/debian/)
