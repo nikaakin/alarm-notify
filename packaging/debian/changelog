@@ -1,5 +1,5 @@
-alarm-notify (1.2.0-1) unstable; urgency=medium
+alarm-notify (1.2.1-1) unstable; urgency=medium
 
-  * debian based support added
+  * version bump on arch
 
- -- Nika Tsutskiridze <nikaakin@users.noreply.github.com>  Wed, 25 Feb 2026 17:35:14 +0400
+ -- Nika Tsutskiridze <nikaakin@users.noreply.github.com>  Wed, 25 Feb 2026 17:39:05 +0400
